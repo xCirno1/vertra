@@ -5,6 +5,13 @@ use crate::camera::Camera;
 use crate::mesh::{BakedMesh, MeshRegistry, Vertex};
 use crate::world::World;
 
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+struct ModelUniform {
+    model: [[f32; 4]; 4],
+    color: [f32; 4],
+}
+
 pub struct PipelineConfig {
     pub initial_vertex_buffer_size: usize,
 }
@@ -79,7 +86,7 @@ impl Pipeline {
         });
         let model_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Model Uniform Buffer"),
-            size: size_of::<[[f32; 4]; 4]>() as wgpu::BufferAddress,
+            size: size_of::<ModelUniform>() as wgpu::BufferAddress,
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -245,9 +252,13 @@ impl Pipeline {
                 // Find the GPU buffers in our Mesh registry using geometry_id
                 if let Some(baked) = mesh_registry.baked_geometries.get(entity.geometry_id.0) {
                     let model_matrix = entity.transform.to_matrix();
+                    let uniform_data = ModelUniform {
+                        model: model_matrix.data,
+                        color: entity.color,
+                    };
 
                     // We update a specialized buffer for the model matrix
-                    self.queue.write_buffer(&self.model_buffer, 0, bytemuck::cast_slice(&[model_matrix.data]));
+                    self.queue.write_buffer(&self.model_buffer, 0, bytemuck::cast_slice(&[uniform_data]));
 
                     // Bind Group 1: Model Matrix (The Entity's Position/Rotation)
                     rpass.set_bind_group(1, &self.model_bind_group, &[]);

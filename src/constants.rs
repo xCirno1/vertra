@@ -14,6 +14,7 @@ pub mod camera {
     pub const UP: [f32; 3] = [0.0, 1.0, 0.0];
     pub const NEAR_PLANE: f32 = 0.1;
     pub const FAR_PLANE: f32 = 1000.0;
+    pub const DEFAULT_ROTATION: f32 = 0.0;
 }
 
 pub mod pipeline {

@@ -12,6 +12,8 @@ pub struct Camera {
     pub fov: f32,         // Field of view in degrees
     pub znear: f32,       // Near clipping plane (e.g., 0.1)
     pub zfar: f32,        // Far clipping plane (e.g., 100.0)
+    pub lr_rot: f32,      // Left/Right rotation
+    pub ud_rot: f32,      // Up/Down rotation
 }
 
 impl Camera {
@@ -24,12 +26,11 @@ impl Camera {
             fov: camera::DEFAULT_FOV,
             znear: camera::NEAR_PLANE,
             zfar: camera::FAR_PLANE,
+            lr_rot: camera::DEFAULT_ROTATION,
+            ud_rot: camera::DEFAULT_ROTATION,
         }
     }
-    pub fn with_target(mut self, target: [f32; 3]) -> Self {
-        self.target = target;
-        self
-    }
+
     pub fn with_aspect(mut self, aspect: f32) -> Self {
         self.aspect = aspect;
         self
@@ -51,12 +52,15 @@ impl Camera {
         self
     }
 
-    pub fn update_position(&mut self, new_pos: [f32; 3]) {
-        self.eye = new_pos;
+    pub fn with_rotation(mut self, rotx: f32, roty: f32) -> Self {
+        self.lr_rot = rotx;
+        self.ud_rot = roty;
+        self.update_target_from_angles();
+        self
     }
 
-    pub fn set_target(&mut self, new_target: [f32; 3]) {
-        self.target = new_target;
+    pub fn update_position(&mut self, new_pos: [f32; 3]) {
+        self.eye = new_pos;
     }
 
     pub fn build_view_projection_matrix(&self) -> Matrix4 {
@@ -64,6 +68,40 @@ impl Camera {
         let proj = Matrix4::perspective(self.fov, self.aspect, self.znear, self.zfar);
 
         proj * view
+    }
+
+    fn update_target_from_angles(&mut self) {
+        let lr_rad = self.lr_rot.to_radians();
+        let ud_rad = self.ud_rot.to_radians();
+
+        // Calculate a direction vector from angles
+        let f_x = lr_rad.cos() * ud_rad.cos();
+        let f_y = ud_rad.sin();
+        let f_z = lr_rad.sin() * ud_rad.cos();
+
+
+        // The target is just the eye position + the direction vector
+        self.target = [
+            self.eye[0] + f_x,
+            self.eye[1] + f_y,
+            self.eye[2] + f_z,
+        ];
+    }
+
+    pub fn rotate(&mut self, dx: f32, dy: f32, inverted: bool) {
+        if !inverted {
+            // Moving mouse up, looks up and right, looks right
+            self.lr_rot -= dx;
+            self.ud_rot -= dy;
+        } else {
+            self.lr_rot += dx;
+            self.ud_rot += dy;
+        }
+
+        // Constrain pitch so you can't flip the camera upside down
+        self.ud_rot = self.ud_rot.clamp(-89.0, 89.0);
+
+        self.update_target_from_angles();
     }
 
     pub fn get_directions(&self) -> ([f32; 3], [f32; 3]) {
@@ -85,9 +123,14 @@ impl Camera {
             forward[0] * self.up[2] - forward[2] * self.up[0],
             forward[1] * self.up[0] - forward[0] * self.up[1],
         ];
+        let r_len_sq = r[0]*r[0] + r[1]*r[1] + r[2]*r[2];
         // Normalize Right
-        let r_len = (r[0]*r[0] + r[1]*r[1] + r[2]*r[2]).sqrt();
-        let right = [r[0] / r_len, r[1] / r_len, r[2] / r_len];
+        let right = if r_len_sq < 0.0001 {
+            [1.0, 0.0, 0.0]
+        } else {
+            let r_len = r_len_sq.sqrt();
+            [r[0] / r_len, r[1] / r_len, r[2] / r_len]
+        };
 
         (forward, right)
     }
